@@ -748,11 +748,11 @@ void V(sem_t *sem)
 /* $begin rio_readn */
 ssize_t rio_readn(int fd, void *usrbuf, size_t n) 
 {
-    size_t nleft = n;
+    size_t nleft = n;    // n 번째 포인터부터 읽음
     ssize_t nread;
-    char *bufp = usrbuf;
+    char *bufp = usrbuf; // 유저 버퍼 포인터 할당
 
-    while (nleft > 0) {
+    while (nleft > 0) {  // 읽어야할 부분이 남아 있을 때
 	if ((nread = read(fd, bufp, nleft)) < 0) {
 	    if (errno == EINTR) /* Interrupted by sig handler return */
 		nread = 0;      /* and call read() again */
@@ -761,8 +761,8 @@ ssize_t rio_readn(int fd, void *usrbuf, size_t n)
 	} 
 	else if (nread == 0)
 	    break;              /* EOF */
-	nleft -= nread;
-	bufp += nread;
+	nleft -= nread;      // 읽은 부분만큼 남은 부분 지우기
+	bufp += nread;       // 읽었으니까 버퍼 포인터는 올리기
     }
     return (n - nleft);         /* Return >= 0 */
 }
