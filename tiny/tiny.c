@@ -11,9 +11,9 @@
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
-void serve_static(int fd, char *filename, int filesize);
+void serve_static(int fd, char *filename, int filesize, void *method);
 void get_filetype(char *filename, char *filetype);
-void serve_dynamic(int fd, char *filename, char *cgiargs);
+void serve_dynamic(int fd, char *filename, char *cgiargs, void *method);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
                  char *longmsg);
 
@@ -59,7 +59,7 @@ void doit(int fd)
   printf("Request headers:\n");
   printf("%s", buf);
   sscanf(buf, "%s %s %s", method, uri, version); // **** buf에 url 뒤 형식이 들어가는 거?
-  if (strcasecmp(method, "GET")) // GET 메서드만
+  if (!(strcasecmp(method, "GET") ==0 || strcasecmp(method, "HEAD")==0)) // GET 메서드만
   {
     /* GET 요청이 아닌 경우 */
     clienterror(fd, method, "501", "Not implemented",
@@ -85,7 +85,7 @@ void doit(int fd)
                   "Tiny couldn’t read the file");
       return;
     }
-    serve_static(fd, filename, sbuf.st_size);
+    serve_static(fd, filename, sbuf.st_size, method);
   }
   else
   { /* Serve dynamic content */
@@ -95,7 +95,7 @@ void doit(int fd)
                   "Tiny couldn’t run the CGI program");
       return;
     }
-    serve_dynamic(fd, filename, cgiargs);
+    serve_dynamic(fd, filename, cgiargs, method);
   }
 }
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg)
@@ -160,7 +160,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
   }
 }
 
-void serve_static(int fd, char *filename, int filesize)
+void serve_static(int fd, char *filename, int filesize, void *method)
 {
   int srcfd;
   char *srcp, filetype[MAXLINE], buf[MAXBUF];
@@ -175,12 +175,24 @@ void serve_static(int fd, char *filename, int filesize)
   printf("Response headers:\n");
   printf("%s", buf);
 
+  if (strcasecmp(method, "HEAD") == 0)
+    return;
+
   /* Send response body to client */
   srcfd = Open(filename, O_RDONLY, 0);                       // 읽기 위해 filename을 Open
-  srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);// 오픈한 파일 가상메모리 영역으로 매핑(파일의 첫번째 filesize 바이트를 주소 srcp에서 시작하는 가상 메모리 영역으로 매핑)
+  // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);// 오픈한 파일 가상메모리 영역으로 매핑(파일의 첫번째 filesize 바이트를 주소 srcp에서 시작하는 가상 메모리 영역으로 매핑)
+  srcp = (void*)malloc(filesize);
+  if (srcp == NULL){
+    Close(srcfd);
+    return;
+  }
+
+  Rio_readn(srcfd, srcp, filesize);
   Close(srcfd);                                              // 메모리 누수 방지(close)
+
   Rio_writen(fd, srcp, filesize);
-  Munmap(srcp, filesize);                                    // 메모리 누수 방지(매핑된 가상메모리 주소 반환)(**** 반환해서 누가쓰나?...ㄴㄴ)
+  free(srcp);
+  // Munmap(srcp, filesize);                                    // 메모리 누수 방지(매핑된 가상메모리 주소 반환)
 }
 
 /*
@@ -201,7 +213,7 @@ void get_filetype(char *filename, char *filetype)
   else
     strcpy(filetype, "text/plain");
 }
-void serve_dynamic(int fd, char *filename, char *cgiargs)
+void serve_dynamic(int fd, char *filename, char *cgiargs, void *method)
 {
   char buf[MAXLINE], *emptylist[] = {NULL};
   /* Return first part of HTTP response */
