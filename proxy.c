@@ -40,9 +40,6 @@ int main(int argc, char **argv)
   socklen_t clientlen;
   pthread_t tid;
   struct sockaddr_storage clientaddr;
-  
-  start_ptr = (web_object_t *)Malloc(sizeof(web_object_t)); 
-  end_ptr = (web_object_t *)Malloc(sizeof(web_object_t));
 
   if (argc != 2)
   {
@@ -58,12 +55,14 @@ int main(int argc, char **argv)
     *clientfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); // 클라이언트 연결 요청 수신
     Getnameinfo((SA *)&clientaddr, clientlen, client_hostname, MAXLINE, client_port, MAXLINE, 0);
     printf("Accepted connection from (%s, %s)\n", client_hostname, client_port);
-    Pthread_create(&tid, NULL, thread, clientfd);                // concurrent 접속 리
+    Pthread_create(&tid, NULL, thread, clientfd);                // concurrent 접속
   }
 }
 
 void *thread(void *vargp)
 {
+  start_ptr = (web_object_t *)Malloc(sizeof(web_object_t)); 
+  end_ptr = (web_object_t *)Malloc(sizeof(web_object_t));
   int clientfd = *((int *)vargp);
   Pthread_detach(pthread_self());
   Free(vargp);
@@ -104,7 +103,7 @@ void doit(int clientfd)
 
   /* Cache되어 있지 않은 경우, Proxy -> Server request */
   serverfd = Open_clientfd(hostname, port); // Server 소켓 생성
-  if (serverfd < 0)
+  if (serverfd < 0)                                           // hostname, port에 해당하는 address를 읽어올 수 없을 때, serverfd에는 -2가 할당됩니다(error).
   {
     clienterror(serverfd, method, "502", "Bad Gateway", "Failed to establish connection with the end server");
     return;
